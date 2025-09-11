@@ -3,54 +3,67 @@ import sys
 import os
 import yaml
 
-# 将项目根目录添加到Python路径，以便能找到core_lib
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+# 导入所有需要的积木
 from core_lib.detector import Detector
+from core_lib.inputs.camera_reader import CameraReader
 from core_lib.inputs.rtsp_reader import RTSPReader
 from core_lib.threaded_stream import ThreadedStream
+from core_lib.handlers.robust_trigger_handler import RobustTriggerHandler
 from core_lib.handlers.file_saver_handler import FileSaverHandler
-from core_lib.handlers.ros_publisher_handler import ROSPublisherHandler
+from core_lib.handlers.ros_bool_publisher_handler import ROSBoolPublisherHandler
 
 # 将处理器名称映射到类
 HANDLER_MAP = {
     "FileSaver": FileSaverHandler,
-    "ROSPublisher": ROSPublisherHandler,
+    "ROSBoolPublisher": ROSBoolPublisherHandler,
+    "RobustTriggerHandler": RobustTriggerHandler
 }
 
 
 def main():
-    # 加载此应用的专属配置
     with open('config.yaml', 'r') as f:
         config = yaml.safe_load(f)
 
-    # --- 组装流水线 ---
+    # --- 1. 初始化检测器和视频流 ---
     detector = Detector(**config['detector_params'])
-    original_reader = RTSPReader(**config['reader_params'])
+
+    input_cfg = config['input_source']
+    if input_cfg['type'] == 'camera':
+        original_reader = CameraReader(**input_cfg['camera_params'])
+    elif input_cfg['type'] == 'rtsp':
+        original_reader = RTSPReader(**input_cfg['rtsp_params'])
+    else:
+        raise ValueError(f"不支持的输入类型: {input_cfg['type']}")
+
     threaded_reader = ThreadedStream(original_reader, **config.get('threaded_stream_params', {})).start()
 
-    handlers = []
-    for handler_config in config.get('handlers', []):
-        handler_name = handler_config.get('name')
-        if handler_name in HANDLER_MAP:
-            HandlerClass = HANDLER_MAP[handler_name]
-            handlers.append(HandlerClass(**handler_config.get('params', {})))
-        else:
-            print(f"警告：未知的处理器名称 '{handler_name}'，已跳过。")
+    # --- 2. 组装处理器 (核心步骤) ---
+    main_handler_cfg = config['main_handler']
 
-    if not handlers:
-        print("警告：没有配置任何处理器，程序将只进行检测。")
+    # a. 先创建所有“动作”处理器
+    action_handlers = []
+    for action_cfg in main_handler_cfg['params']['action_handlers']:
+        ActionHandlerClass = HANDLER_MAP[action_cfg['type']]
+        action_handlers.append(ActionHandlerClass(**action_cfg['params']))
 
-    print("Orin NX 应用启动：多线程读取RTSP，检测并处理...")
+    # b. 创建主处理器，并将动作处理器列表作为参数注入进去
+    RobustHandlerClass = HANDLER_MAP[main_handler_cfg['type']]
+    # 提取RobustTriggerHandler自身的参数，并添加action_handlers
+    robust_handler_params = main_handler_cfg['params'].copy()
+    robust_handler_params['action_handlers'] = action_handlers
+
+    main_handler = RobustHandlerClass(**robust_handler_params)
+
+    print("鲁棒性检测应用启动...")
     try:
         while threaded_reader.more():
             frame = threaded_reader.read()
-            results = detector.detect(frame)
-
-            # 将结果交给所有处理器处理
-            for handler in handlers:
-                handler.handle(frame, results)
-
+            # 推理时关闭详细输出，保持控制台干净
+            results = detector.detect(frame, verbose=False)
+            # 只需要调用主处理器即可
+            main_handler.handle(frame, results)
     except KeyboardInterrupt:
         print("\n应用终止。")
     finally:

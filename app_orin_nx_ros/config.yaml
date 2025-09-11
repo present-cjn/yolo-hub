@@ -2,26 +2,38 @@
 
 # 1. 核心检测器配置
 detector_params:
-  model_path: "yolov8n.pt" # 可以换成您自己的模型路径
+  model_path: "yolov5nu.engine" # 使用您的.engine文件
 
 # 2. 输入源配置
-reader_params:
-  rtsp_url: "rtsp:192.168.3.25:8554/main.264" #
+# 选择 camera 或 rtsp
+input_source:
+  type: "camera" # 'camera' 或 'rtsp'
+  camera_params:
+    camera_id: 0
+  rtsp_params:
+    rtsp_url: "rtsp:192.168.144.25:8554/main.264"
 
 # 3. 线程化视频流包装器配置
 threaded_stream_params:
-  queue_size: 1 # 实时处理，队列大小为1即可
+  queue_size: 1
 
-# 4. 结果处理器列表 (可以有多个)
-handlers:
-  # 第一个处理器：保存图片
-  - name: "FileSaver"
-    params:
-      save_path: "results" # 图片将保存在 app_orin_nx_ros/results/ 目录下
-      prefix: "orin_detection"
-
-  # 第二个处理器：发布ROS话题
-  - name: "ROSPublisher"
-    params:
-      topic_name: "status_check"
-      node_name: "yolohub_orin_nx_node"
+# 4. 结果处理器配置 (核心)
+# 我们只定义一个主处理器：RobustTriggerHandler
+# 然后在它的参数里，定义它触发时需要调用的“动作处理器”
+main_handler:
+  type: "RobustTriggerHandler"
+  params:
+    target_class_name: "person"
+    window_size: 30
+    count_threshold: 20
+    area_threshold: 8000.0
+    # 定义满足条件时，需要执行的动作列表
+    action_handlers:
+      - type: "FileSaver"
+        params:
+          base_path: "result"
+          filename_format: "{time}_cnt{count}_area{area}.jpg"
+      - type: "ROSBoolPublisher"
+        params:
+          topic_name: "/status_check"
+          node_name: "yolo_status_checker_node"
