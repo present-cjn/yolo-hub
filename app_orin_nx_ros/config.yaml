@@ -1,0 +1,27 @@
+# app_orin_nx_ros/config.yaml
+
+# 1. 核心检测器配置
+detector_params:
+  model_path: "yolov8n.pt" # 可以换成您自己的模型路径
+
+# 2. 输入源配置
+reader_params:
+  rtsp_url: "rtsp:192.168.3.25:8554/main.264" #
+
+# 3. 线程化视频流包装器配置
+threaded_stream_params:
+  queue_size: 1 # 实时处理，队列大小为1即可
+
+# 4. 结果处理器列表 (可以有多个)
+handlers:
+  # 第一个处理器：保存图片
+  - name: "FileSaver"
+    params:
+      save_path: "results" # 图片将保存在 app_orin_nx_ros/results/ 目录下
+      prefix: "orin_detection"
+
+  # 第二个处理器：发布ROS话题
+  - name: "ROSPublisher"
+    params:
+      topic_name: "status_check"
+      node_name: "yolohub_orin_nx_node"
