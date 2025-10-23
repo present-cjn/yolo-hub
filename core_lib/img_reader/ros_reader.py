@@ -1,81 +1,68 @@
-# app_ros_input_demo/run_ros_demo.py
-import cv2
-import sys
-import os
-import time
+# core_lib/inputs/ros_image_reader.py
 
-# --- 1. 导入 core_lib ---
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-try:
-    from core_lib.detector import Detector
-    from core_lib.inputs.ros_image_reader import ROSImageReader
-except ImportError as e:
-    print(f"错误：无法导入模块: {e}")
-    sys.exit(1)
+import threading
 
-# ==========================================================
-# 2. 配置参数
-# ==========================================================
-# TODO: 确保你有 'yolov8n.pt' 文件，或者改成你自己的模型路径
-MODEL_PATH = "yolov8n.pt"
-# TODO: 修改为您要订阅的图像话题
-ROS_IMAGE_TOPIC = "/camera/image_raw"
-WINDOW_NAME = "YoloHub ROS Demo"
 
-# ==========================================================
-# 3. 初始化
-# ==========================================================
-try:
-    print("正在初始化YOLO检测器...")
-    detector = Detector(model_path=MODEL_PATH)
+class ROSImageReader:
+    """
+    一个包装器，用于订阅ROS图像话题并在回调中存储最新的帧。
+    它不是一个迭代器，而是提供一个 .read() 方法来获取最新帧。
+    """
 
-    # 初始化 ROSImageReader 会自动初始化ROS节点
-    print(f"正在订阅 ROS 话题: {ROS_IMAGE_TOPIC}...")
-    reader = ROSImageReader(topic_name=ROS_IMAGE_TOPIC)
+    def __init__(self, topic_name: str, node_name: str = 'yolohub_ros_reader'):
+        self.topic_name = topic_name
+        self.node_name = node_name
+        self.latest_frame = None
+        self.lock = threading.Lock()
 
-    cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
-    print("初始化完成，等待ROS图像消息...")
-    print("按 'q' 键退出。")
+        try:
+            import rospy
+            from sensor_msgs.msg import Image
+            from cv_bridge import CvBridge
+        except ImportError:
+            print("错误：ROS依赖未满足。")
+            raise ImportError("请确保已安装 rospy, sensor_msgs, 和 cv_bridge (通常通过 apt 安装)。")
 
-except Exception as e:
-    print(f"初始化失败: {e}")
-    sys.exit(1)
+        self.rospy = rospy
+        self.bridge = CvBridge()
 
-# ==========================================================
-# 4. 主检测循环 (单线程)
-# ==========================================================
-try:
-    # 循环直到ROS关闭 (例如 Ctrl+C)
-    while not reader.rospy.is_shutdown():
+        # 初始化节点（如果尚未初始化）
+        if not self.rospy.core.is_initialized():
+            self.rospy.init_node(self.node_name, anonymous=True)
+            print(f"ROS 节点 '{self.node_name}' 已初始化。")
 
-        # 1. 从订阅器获取最新一帧
-        frame = reader.read()
+        # 订阅话题
+        self.subscriber = self.rospy.Subscriber(self.topic_name, Image, self._callback)
+        print(f"已订阅 ROS 图像话题: {self.topic_name}")
 
-        # 如果还未收到帧，则等待
-        if frame is None:
-            time.sleep(0.1)  # 稍作等待，避免CPU空转
-            continue
+    def _callback(self, msg):
+        """ROS回调函数，在独立的线程中运行。"""
+        try:
+            # 将ROS Image消息转换为OpenCV图像 (bgr8)
+            cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+            with self.lock:
+                self.latest_frame = cv_image
+        except Exception as e:
+            self.rospy.logerr(f"CVBridge 转换错误: {e}")
 
-        # 2. 检测
-        results = detector.detect(frame, verbose=False)
+    def read(self):
+        """
+        以线程安全的方式获取最新的帧。
+        这是一个非阻塞方法。
+        :return: 最新的OpenCV帧 (numpy array) 或 None
+        """
+        with self.lock:
+            if self.latest_frame is not None:
+                return self.latest_frame.copy()
+        return None
 
-        # 3. 获取带标注的图像
-        annotated_frame = results[0].plot()
+    def is_ready(self):
+        """检查是否已收到至少一帧。"""
+        with self.lock:
+            return self.latest_frame is not None
 
-        # 4. 显示结果
-        cv2.imshow(WINDOW_NAME, annotated_frame)
-
-        # 检查退出键
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            print("检测到 'q' 键，正在退出...")
-            break
-
-except KeyboardInterrupt:
-    print("\n检测被用户中断 (Ctrl+C)。")
-
-finally:
-    # 5. 清理资源
-    print("正在释放资源并关闭窗口...")
-    reader.release()
-    cv2.destroyAllWindows()
-    print("程序退出。")
+    def release(self):
+        """停止订阅。"""
+        if hasattr(self, 'subscriber'):
+            self.subscriber.unregister()
+            print(f"已取消订阅 {self.topic_name}")
