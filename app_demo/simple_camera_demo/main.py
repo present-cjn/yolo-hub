@@ -8,7 +8,7 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 try:
     from core_lib.detector import Detector
-    from core_lib.inputs.camera_reader import CameraReader
+    from core_lib.img_reader.camera_reader import CameraReader
     # 注意：这个简单demo不使用多线程
 except ImportError:
     print("错误：无法从 core_lib 导入模块。")

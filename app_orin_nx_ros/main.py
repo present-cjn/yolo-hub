@@ -7,8 +7,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # 导入所有需要的积木
 from core_lib.detector import Detector
-from core_lib.inputs.camera_reader import CameraReader
-from core_lib.inputs.rtsp_reader import RTSPReader
+from core_lib.img_reader.camera_reader import CameraReader
+from core_lib.img_reader.rtsp_reader import RTSPReader
 from core_lib.threaded_stream import ThreadedStream
 from core_lib.handlers.robust_trigger_handler import RobustTriggerHandler
 from core_lib.handlers.file_saver_handler import FileSaverHandler
