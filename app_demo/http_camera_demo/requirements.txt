@@ -1,0 +1,2 @@
+requests
+# opencv-python, ultralytics 假定已在主环境中安装
