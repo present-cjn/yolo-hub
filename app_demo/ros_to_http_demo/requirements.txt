@@ -1,0 +1,3 @@
+requests
+# opencv-python, ultralytics 假定已在YoloHub主环境中安装
+# rospy, sensor_msgs, cv_bridge 假定已在ROS环境中安装
