@@ -1,0 +1,25 @@
+# YoloHub 核心依赖
+# -----------------
+# 建议在安装这些包之前，先根据您的硬件(如NVIDIA Jetson)
+# 安装好 PyTorch 和 Torchvision 的特定版本。
+
+# 1. YOLOv8 核心
+ultralytics
+
+# 2. 图像/视频处理
+opencv-python
+
+# 3. HTTP 发布器 (用于远程仪表盘Demos)
+# requests
+
+# 4. YAML解析 (ultralytics的依赖，也可能用于配置)
+# pyyaml
+
+# --- ROS 依赖 (重要提示) ---
+# 以下包不应/不能通过 pip 安装。
+# 它们是ROS环境的一部分，通常通过 'apt-get' 安装。
+# (例如: sudo apt-get install ros-noetic-rospy ros-noetic-cv-bridge)
+#
+# rospy
+# sensor_msgs
+# cv_bridge
