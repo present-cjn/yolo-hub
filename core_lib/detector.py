@@ -10,11 +10,12 @@ class Detector:
         self.model = YOLO(model_path)
         print(f"模型 '{model_path}' 加载成功。")
 
-    def detect(self, frame, verbose=False):
+    def detect(self, frame, verbose=False, **kwargs):
         """
         对单帧图像进行检测。
         :param frame: 输入的图像 (numpy array)
         :param verbose: 是否打印详细检测信息
+        :param kwargs: 传递给YOLO模型的其他参数, e.g., conf=0.5, iou=0.45
         :return: ultralytics的检测结果对象
         """
-        return self.model(frame, verbose=verbose)
+        return self.model(frame, verbose=verbose, **kwargs)
